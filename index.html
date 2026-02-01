@@ -26,7 +26,7 @@
       --canvasH: 900;
       --gap: 0px;
 
-      /* KEY: scales center box UI during export */
+      /* scales center box UI during export so preview==export proportions */
       --uiScale: 1;
     }
 
@@ -67,7 +67,7 @@
       margin: 0 0 10px;
     }
 
-    .stage{ width: 100%; display: grid; place-items: center; }
+    .stage{ width: 100%; display:grid; place-items:center; }
 
     .canvas{
       position: relative;
@@ -79,7 +79,7 @@
       border: 1px solid rgba(255,255,255,.10);
     }
 
-    /* During export, lock pixel size exactly */
+    /* During export: lock exact pixel size */
     .canvas.capture{
       width: var(--capW) !important;
       height: var(--capH) !important;
@@ -112,7 +112,7 @@
 
     .slot .placeholder{
       position:absolute;
-      inset: 0;
+      inset:0;
       display:grid;
       place-items:center;
       color: rgba(255,255,255,.55);
@@ -122,32 +122,45 @@
       background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
     }
 
-    /* Center text box (scaled by --uiScale) */
+    /* Center text box: background moved to ::before to avoid html2canvas tiling artifacts */
     .centerBox{
       position:absolute;
       left: 50%;
       top: 50%;
-      transform: translate(-50%, -50%);
+      transform: translate(-50%, -50%) translateZ(0);
       max-width: 78%;
       width: fit-content;
-      background: var(--boxBg);
+
       color: var(--boxText);
+      text-align: center;
+      white-space: pre-wrap;
+      font-size: calc(var(--boxFontSize) * 1px * var(--uiScale));
+      font-weight: var(--boxFontWeight);
+      line-height: 1.2;
 
       border-radius: calc(var(--boxRadius) * 1px * var(--uiScale));
       padding:
         calc(var(--boxPadV) * 1px * var(--uiScale))
         calc(var(--boxPadH) * 1px * var(--uiScale));
 
-      box-shadow: 0 18px 40px rgba(0,0,0,.35);
-      border: 1px solid rgba(0,0,0,.08);
-      text-align: center;
-      white-space: pre-wrap;
+      background: transparent;
+      border: none;
+      box-shadow: none;
 
-      font-size: calc(var(--boxFontSize) * 1px * var(--uiScale));
-      font-weight: var(--boxFontWeight);
-      line-height: 1.2;
-
+      overflow: hidden;
+      isolation: isolate;
       pointer-events: none;
+    }
+
+    .centerBox::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      border-radius: inherit;
+      background: var(--boxBg);
+      border: 1px solid rgba(0,0,0,.08);
+      box-shadow: 0 18px 40px rgba(0,0,0,.35);
+      z-index: -1;
     }
 
     .controls{ display:flex; flex-direction: column; gap: 12px; }
@@ -236,6 +249,7 @@
     code{ font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: rgba(255,255,255,.85); }
   </style>
 </head>
+
 <body>
   <div class="wrap">
     <div class="card">
@@ -244,40 +258,25 @@
       <div class="stage">
         <div id="exportArea" class="canvas" aria-label="Collage canvas">
           <div class="grid">
-            <div class="slot">
-              <img id="img1" alt="" />
-              <div class="placeholder" id="ph1">Image 1</div>
-            </div>
-            <div class="slot">
-              <img id="img2" alt="" />
-              <div class="placeholder" id="ph2">Image 2</div>
-            </div>
-            <div class="slot">
-              <img id="img3" alt="" />
-              <div class="placeholder" id="ph3">Image 3</div>
-            </div>
-            <div class="slot">
-              <img id="img4" alt="" />
-              <div class="placeholder" id="ph4">Image 4</div>
-            </div>
+            <div class="slot"><img id="img1" alt="" /><div class="placeholder" id="ph1">Image 1</div></div>
+            <div class="slot"><img id="img2" alt="" /><div class="placeholder" id="ph2">Image 2</div></div>
+            <div class="slot"><img id="img3" alt="" /><div class="placeholder" id="ph3">Image 3</div></div>
+            <div class="slot"><img id="img4" alt="" /><div class="placeholder" id="ph4">Image 4</div></div>
           </div>
 
-          <div id="centerBox" class="centerBox">
-СБД 11-р хороo зүүн айл төвөөс
-Ерөнхий Зүгээр зүүн талд
-Байрлалтай ариун очир хотхонд 52м²
-2 өрөө байр худалдана.
-          </div>
+          <div id="centerBox" class="centerBox"></div>
         </div>
       </div>
 
       <div class="hr"></div>
       <div style="display:flex; gap:10px; flex-wrap:wrap;">
         <button class="btn primary" id="downloadBtn">Download PNG</button>
+        <button class="btn" id="resetDefaultsBtn">Reset defaults</button>
         <button class="btn" id="clearBtn">Clear all images</button>
       </div>
+
       <p class="mini" style="margin-top:10px;">
-        Preview and export match now because we stopped pretending pixels are relative.
+        If preview and export still differ after this, your browser is doing performance art.
       </p>
     </div>
 
@@ -298,7 +297,7 @@
         <div class="field">
           <label>Image fit</label>
           <select id="fitMode">
-            <option value="cover" selected>Cover (fills slot)</option>
+            <option value="cover">Cover (fills slot)</option>
             <option value="contain">Contain (no crop)</option>
           </select>
         </div>
@@ -359,26 +358,43 @@
 
   <script>
     const $ = (id) => document.getElementById(id);
+
     const exportArea = $("exportArea");
     const centerBox  = $("centerBox");
 
     const imgEls = [null, $("img1"), $("img2"), $("img3"), $("img4")];
     const phEls  = [null, $("ph1"),  $("ph2"),  $("ph3"),  $("ph4")];
 
+    const DEFAULTS = {
+      fitMode: "cover",
+      text: `СБД 11-р хороo, зүүн айл төвөөс ертөнцийн зүгээр зүүн талд
+байрлалтай Ариун очир хотхонд 52м.кв 2 өрөө байр худалдаана
+
+📲 📲 📲 : 8081-6404`,
+      fontSize: 28,
+      fontWeight: 800,
+      textColor: "#111111",
+      boxColor: "rgba(255,255,255,0.95)",
+      boxRadius: 34,
+      padV: 18,
+      padH: 28,
+      cW: 1600,
+      cH: 900
+    };
+
     function setCSSVar(name, value){
       document.documentElement.style.setProperty(name, value);
     }
-    function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
 
-    // init textarea from box text
-    $("textInput").value = centerBox.innerText.replace(/\r\n/g, "\n").trim();
+    function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
 
     function applyTextSettings(){
       setCSSVar("--boxFontSize", $("fontSize").value);
       setCSSVar("--boxFontWeight", $("fontWeight").value);
 
-      centerBox.style.color = $("textColor").value;
-      centerBox.style.background = $("boxColor").value;
+      // box colors go to CSS vars so ::before uses it
+      setCSSVar("--boxBg", $("boxColor").value);
+      setCSSVar("--boxText", $("textColor").value);
 
       setCSSVar("--boxRadius", $("boxRadius").value);
       setCSSVar("--boxPadV", $("padV").value);
@@ -395,7 +411,9 @@
     }
 
     function setFitMode(mode){
-      for (let i=1; i<=4; i++) imgEls[i].style.objectFit = mode;
+      for (let i=1; i<=4; i++){
+        imgEls[i].style.objectFit = mode;
+      }
     }
 
     async function fileToDataURL(file){
@@ -415,16 +433,42 @@
       phEls[slot].style.display = "none";
     }
 
+    function applyDefaults(){
+      $("fitMode").value = DEFAULTS.fitMode;
+      $("textInput").value = DEFAULTS.text;
+
+      $("fontSize").value = DEFAULTS.fontSize;
+      $("fontWeight").value = DEFAULTS.fontWeight;
+
+      $("textColor").value = DEFAULTS.textColor;
+      $("boxColor").value = DEFAULTS.boxColor;
+
+      $("boxRadius").value = DEFAULTS.boxRadius;
+      $("padV").value = DEFAULTS.padV;
+      $("padH").value = DEFAULTS.padH;
+
+      $("cW").value = DEFAULTS.cW;
+      $("cH").value = DEFAULTS.cH;
+
+      setFitMode(DEFAULTS.fitMode);
+      applyCanvasSizeVars();
+      applyTextSettings();
+    }
+
+    // Wire uploads
     for (let i=1; i<=4; i++){
       $("up"+i).addEventListener("change", (e) => handleUpload(i, e.target.files?.[0]));
     }
 
+    // Controls
     $("fitMode").addEventListener("change", (e) => setFitMode(e.target.value));
 
     ["textInput","fontSize","fontWeight","textColor","boxColor","boxRadius","padV","padH"]
       .forEach(id => $(id).addEventListener("input", applyTextSettings));
 
     ["cW","cH"].forEach(id => $(id).addEventListener("input", applyCanvasSizeVars));
+
+    $("resetDefaultsBtn").addEventListener("click", applyDefaults);
 
     $("clearBtn").addEventListener("click", () => {
       for (let i=1; i<=4; i++){
@@ -434,23 +478,24 @@
       }
     });
 
+    // Download
     $("downloadBtn").addEventListener("click", async () => {
       const w = clamp(parseInt($("cW").value || 1600, 10), 800, 4000);
       const h = clamp(parseInt($("cH").value || 900, 10), 600, 4000);
 
-      // Wait for fonts (prevents text jumping)
+      // Wait for fonts
       if (document.fonts && document.fonts.ready) {
         try { await document.fonts.ready; } catch {}
       }
 
-      // Compute how big the preview is currently displayed
+      // preview displayed size
       const rect = exportArea.getBoundingClientRect();
       const uiScale = w / rect.width;
 
-      // Apply scaling ONLY for export so UI matches preview proportions
+      // apply export-only ui scale
       setCSSVar("--uiScale", uiScale);
 
-      // Lock export area size
+      // lock export size
       exportArea.classList.add("capture");
       exportArea.style.setProperty("--capW", w + "px");
       exportArea.style.setProperty("--capH", h + "px");
@@ -458,8 +503,8 @@
 
       try{
         const canvas = await html2canvas(exportArea, {
-          backgroundColor: null,
-          scale: 1,          // IMPORTANT: scale handled by real pixel size + uiScale
+          backgroundColor: "#000", // helps avoid transparency artifacts
+          scale: 1,
           useCORS: true
         });
 
@@ -471,13 +516,12 @@
         exportArea.classList.remove("capture");
         exportArea.style.removeProperty("--capW");
         exportArea.style.removeProperty("--capH");
-        setCSSVar("--uiScale", 1); // reset back to preview
+        setCSSVar("--uiScale", 1);
       }
     });
 
-    applyTextSettings();
-    applyCanvasSizeVars();
-    setFitMode($("fitMode").value);
+    // Start with real defaults
+    applyDefaults();
   </script>
 </body>
 </html>
