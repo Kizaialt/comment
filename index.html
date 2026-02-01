@@ -5,14 +5,11 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>4-Photo Collage + Center Text</title>
 
-  <!-- html2canvas for exporting the collage as PNG -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
   <style>
     :root{
       --bg: #0b0d12;
-      --panel: #111522;
-      --panel2: #0f1320;
       --border: rgba(255,255,255,.12);
       --text: rgba(255,255,255,.9);
       --muted: rgba(255,255,255,.65);
@@ -28,6 +25,9 @@
       --canvasW: 1600;
       --canvasH: 900;
       --gap: 0px;
+
+      /* KEY: scales center box UI during export */
+      --uiScale: 1;
     }
 
     *{ box-sizing:border-box; }
@@ -49,10 +49,7 @@
       grid-template-columns: 1.2fr .8fr;
       gap: 16px;
     }
-
-    @media (max-width: 980px){
-      .wrap{ grid-template-columns: 1fr; }
-    }
+    @media (max-width: 980px){ .wrap{ grid-template-columns: 1fr; } }
 
     .card{
       background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
@@ -70,13 +67,8 @@
       margin: 0 0 10px;
     }
 
-    .stage{
-      width: 100%;
-      display: grid;
-      place-items: center;
-    }
+    .stage{ width: 100%; display: grid; place-items: center; }
 
-    /* The thing we export */
     .canvas{
       position: relative;
       width: min(100%, 1000px);
@@ -87,7 +79,7 @@
       border: 1px solid rgba(255,255,255,.10);
     }
 
-    /* IMPORTANT FIX: during export, lock pixel size exactly (no aspect-ratio tricks) */
+    /* During export, lock pixel size exactly */
     .canvas.capture{
       width: var(--capW) !important;
       height: var(--capH) !important;
@@ -115,7 +107,6 @@
       height: 100%;
       display:block;
       object-fit: cover;
-      opacity: 1;
       transform: translateZ(0);
     }
 
@@ -131,7 +122,7 @@
       background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
     }
 
-    /* Center text box */
+    /* Center text box (scaled by --uiScale) */
     .centerBox{
       position:absolute;
       left: 50%;
@@ -141,29 +132,26 @@
       width: fit-content;
       background: var(--boxBg);
       color: var(--boxText);
-      border-radius: calc(var(--boxRadius) * 1px);
-      padding: calc(var(--boxPadV) * 1px) calc(var(--boxPadH) * 1px);
+
+      border-radius: calc(var(--boxRadius) * 1px * var(--uiScale));
+      padding:
+        calc(var(--boxPadV) * 1px * var(--uiScale))
+        calc(var(--boxPadH) * 1px * var(--uiScale));
+
       box-shadow: 0 18px 40px rgba(0,0,0,.35);
       border: 1px solid rgba(0,0,0,.08);
       text-align: center;
       white-space: pre-wrap;
-      font-size: calc(var(--boxFontSize) * 1px);
+
+      font-size: calc(var(--boxFontSize) * 1px * var(--uiScale));
       font-weight: var(--boxFontWeight);
       line-height: 1.2;
+
       pointer-events: none;
     }
 
-    .controls{
-      display:flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .row{
-      display:grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
+    .controls{ display:flex; flex-direction: column; gap: 12px; }
+    .row{ display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
     .field{
       background: rgba(0,0,0,.25);
@@ -171,7 +159,6 @@
       border-radius: 12px;
       padding: 10px;
     }
-
     .field label{
       display:block;
       font-size: 12px;
@@ -188,12 +175,7 @@
       padding: 10px;
       outline: none;
     }
-
-    textarea{
-      min-height: 110px;
-      resize: vertical;
-      line-height: 1.35;
-    }
+    textarea{ min-height: 110px; resize: vertical; line-height: 1.35; }
 
     .btn{
       display:inline-flex;
@@ -208,7 +190,6 @@
       cursor:pointer;
       user-select:none;
       transition: .15s ease;
-      text-decoration:none;
       font-weight: 650;
     }
     .btn:hover{ background: rgba(255,255,255,.12); }
@@ -218,15 +199,9 @@
       background: rgba(130,90,255,.28);
       border-color: rgba(130,90,255,.45);
     }
-    .btn.primary:hover{
-      background: rgba(130,90,255,.35);
-    }
+    .btn.primary:hover{ background: rgba(130,90,255,.35); }
 
-    .mini{
-      font-size: 12px;
-      color: var(--muted);
-      line-height: 1.4;
-    }
+    .mini{ font-size: 12px; color: var(--muted); line-height: 1.4; }
 
     .uploads{
       display:grid;
@@ -245,11 +220,7 @@
       background: rgba(0,0,0,.18);
     }
 
-    .uploadBtn span{
-      font-size: 13px;
-      color: var(--muted);
-    }
-
+    .uploadBtn span{ font-size: 13px; color: var(--muted); }
     .uploadBtn input{ display:none; }
 
     .pill{
@@ -261,17 +232,8 @@
       cursor:pointer;
     }
 
-    .hr{
-      height:1px;
-      background: rgba(255,255,255,.12);
-      margin: 10px 0;
-    }
-
-    code{
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      font-size: 12px;
-      color: rgba(255,255,255,.85);
-    }
+    .hr{ height:1px; background: rgba(255,255,255,.12); margin: 10px 0; }
+    code{ font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: rgba(255,255,255,.85); }
   </style>
 </head>
 <body>
@@ -282,19 +244,19 @@
       <div class="stage">
         <div id="exportArea" class="canvas" aria-label="Collage canvas">
           <div class="grid">
-            <div class="slot" data-slot="1">
+            <div class="slot">
               <img id="img1" alt="" />
               <div class="placeholder" id="ph1">Image 1</div>
             </div>
-            <div class="slot" data-slot="2">
+            <div class="slot">
               <img id="img2" alt="" />
               <div class="placeholder" id="ph2">Image 2</div>
             </div>
-            <div class="slot" data-slot="3">
+            <div class="slot">
               <img id="img3" alt="" />
               <div class="placeholder" id="ph3">Image 3</div>
             </div>
-            <div class="slot" data-slot="4">
+            <div class="slot">
               <img id="img4" alt="" />
               <div class="placeholder" id="ph4">Image 4</div>
             </div>
@@ -310,14 +272,12 @@
       </div>
 
       <div class="hr"></div>
-
       <div style="display:flex; gap:10px; flex-wrap:wrap;">
         <button class="btn primary" id="downloadBtn">Download PNG</button>
         <button class="btn" id="clearBtn">Clear all images</button>
       </div>
-
       <p class="mini" style="margin-top:10px;">
-        Tip: Export is exactly what you see now. If it looks wrong, it’s because you made it wrong.
+        Preview and export match now because we stopped pretending pixels are relative.
       </p>
     </div>
 
@@ -328,34 +288,10 @@
         <div class="field">
           <label>Upload images (each slot has its own button)</label>
           <div class="uploads">
-            <div class="uploadBtn">
-              <span>Slot 1</span>
-              <label class="pill">
-                Upload
-                <input type="file" accept="image/*" id="up1" />
-              </label>
-            </div>
-            <div class="uploadBtn">
-              <span>Slot 2</span>
-              <label class="pill">
-                Upload
-                <input type="file" accept="image/*" id="up2" />
-              </label>
-            </div>
-            <div class="uploadBtn">
-              <span>Slot 3</span>
-              <label class="pill">
-                Upload
-                <input type="file" accept="image/*" id="up3" />
-              </label>
-            </div>
-            <div class="uploadBtn">
-              <span>Slot 4</span>
-              <label class="pill">
-                Upload
-                <input type="file" accept="image/*" id="up4" />
-              </label>
-            </div>
+            <div class="uploadBtn"><span>Slot 1</span><label class="pill">Upload<input type="file" accept="image/*" id="up1" /></label></div>
+            <div class="uploadBtn"><span>Slot 2</span><label class="pill">Upload<input type="file" accept="image/*" id="up2" /></label></div>
+            <div class="uploadBtn"><span>Slot 3</span><label class="pill">Upload<input type="file" accept="image/*" id="up3" /></label></div>
+            <div class="uploadBtn"><span>Slot 4</span><label class="pill">Upload<input type="file" accept="image/*" id="up4" /></label></div>
           </div>
         </div>
 
@@ -365,9 +301,6 @@
             <option value="cover" selected>Cover (fills slot)</option>
             <option value="contain">Contain (no crop)</option>
           </select>
-          <p class="mini" style="margin:8px 0 0;">
-            Cover matches your sample. Contain avoids cropping.
-          </p>
         </div>
 
         <div class="field">
@@ -382,7 +315,7 @@
           </div>
           <div class="field">
             <label>Font weight</label>
-            <input type="number" id="fontWeight" min="200" max="900" step="50" value="800" />
+            <input type="number" id="fontWeight" min="200" max="1000" step="50" value="800" />
           </div>
         </div>
 
@@ -419,9 +352,6 @@
             <input type="number" id="cW" min="800" max="4000" value="1600" />
             <input type="number" id="cH" min="600" max="4000" value="900" />
           </div>
-          <p class="mini" style="margin:8px 0 0;">
-            1600×900 is a good default. Bigger = heavier file.
-          </p>
         </div>
       </div>
     </div>
@@ -429,7 +359,6 @@
 
   <script>
     const $ = (id) => document.getElementById(id);
-
     const exportArea = $("exportArea");
     const centerBox  = $("centerBox");
 
@@ -439,12 +368,10 @@
     function setCSSVar(name, value){
       document.documentElement.style.setProperty(name, value);
     }
-
     function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
 
-    // Put initial text into textarea (preserve line breaks)
-    const defaultText = centerBox.innerText.replace(/\r\n/g, "\n").trim();
-    $("textInput").value = defaultText;
+    // init textarea from box text
+    $("textInput").value = centerBox.innerText.replace(/\r\n/g, "\n").trim();
 
     function applyTextSettings(){
       setCSSVar("--boxFontSize", $("fontSize").value);
@@ -457,7 +384,6 @@
       setCSSVar("--boxPadV", $("padV").value);
       setCSSVar("--boxPadH", $("padH").value);
 
-      // Update text
       centerBox.textContent = $("textInput").value;
     }
 
@@ -469,9 +395,7 @@
     }
 
     function setFitMode(mode){
-      for (let i=1; i<=4; i++){
-        imgEls[i].style.objectFit = mode;
-      }
+      for (let i=1; i<=4; i++) imgEls[i].style.objectFit = mode;
     }
 
     async function fileToDataURL(file){
@@ -485,38 +409,23 @@
 
     async function handleUpload(slot, file){
       if (!file) return;
-
-      if (!file.type.startsWith("image/")){
-        alert("Not an image.");
-        return;
-      }
-
+      if (!file.type.startsWith("image/")) return alert("Not an image.");
       const dataURL = await fileToDataURL(file);
       imgEls[slot].src = dataURL;
-      imgEls[slot].alt = `Slot ${slot} image`;
       phEls[slot].style.display = "none";
     }
 
-    // Wire uploads
     for (let i=1; i<=4; i++){
-      $("up"+i).addEventListener("change", (e) => {
-        handleUpload(i, e.target.files?.[0]);
-      });
+      $("up"+i).addEventListener("change", (e) => handleUpload(i, e.target.files?.[0]));
     }
 
-    // Fit mode
-    $("fitMode").addEventListener("change", (e) => {
-      setFitMode(e.target.value);
-    });
+    $("fitMode").addEventListener("change", (e) => setFitMode(e.target.value));
 
-    // Text + style settings
     ["textInput","fontSize","fontWeight","textColor","boxColor","boxRadius","padV","padH"]
       .forEach(id => $(id).addEventListener("input", applyTextSettings));
 
-    // Canvas size vars (preview aspect-ratio)
     ["cW","cH"].forEach(id => $(id).addEventListener("input", applyCanvasSizeVars));
 
-    // Clear button
     $("clearBtn").addEventListener("click", () => {
       for (let i=1; i<=4; i++){
         imgEls[i].removeAttribute("src");
@@ -525,28 +434,32 @@
       }
     });
 
-    // DOWNLOAD FIXED: lock BOTH width+height during capture and DO NOT force html2canvas width/height
     $("downloadBtn").addEventListener("click", async () => {
       const w = clamp(parseInt($("cW").value || 1600, 10), 800, 4000);
       const h = clamp(parseInt($("cH").value || 900, 10), 600, 4000);
 
-      // Wait for fonts so text doesn't jump sizes in export
+      // Wait for fonts (prevents text jumping)
       if (document.fonts && document.fonts.ready) {
         try { await document.fonts.ready; } catch {}
       }
 
-      // Lock export area to exact pixels
+      // Compute how big the preview is currently displayed
+      const rect = exportArea.getBoundingClientRect();
+      const uiScale = w / rect.width;
+
+      // Apply scaling ONLY for export so UI matches preview proportions
+      setCSSVar("--uiScale", uiScale);
+
+      // Lock export area size
       exportArea.classList.add("capture");
       exportArea.style.setProperty("--capW", w + "px");
       exportArea.style.setProperty("--capH", h + "px");
-
-      // Force layout before capture
-      exportArea.getBoundingClientRect();
+      exportArea.getBoundingClientRect(); // reflow
 
       try{
         const canvas = await html2canvas(exportArea, {
           backgroundColor: null,
-          scale: Math.min(2, window.devicePixelRatio || 1),
+          scale: 1,          // IMPORTANT: scale handled by real pixel size + uiScale
           useCORS: true
         });
 
@@ -558,10 +471,10 @@
         exportArea.classList.remove("capture");
         exportArea.style.removeProperty("--capW");
         exportArea.style.removeProperty("--capH");
+        setCSSVar("--uiScale", 1); // reset back to preview
       }
     });
 
-    // Initial apply
     applyTextSettings();
     applyCanvasSizeVars();
     setFitMode($("fitMode").value);
