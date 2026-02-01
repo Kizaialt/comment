@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>4-Photo Collage + Center Text</title>
+
+  <!-- html2canvas for exporting the collage as PNG -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+  <style>
+    :root{
+      --bg: #0b0d12;
+      --panel: #111522;
+      --panel2: #0f1320;
+      --border: rgba(255,255,255,.12);
+      --text: rgba(255,255,255,.9);
+      --muted: rgba(255,255,255,.65);
+
+      --boxBg: rgba(255,255,255,0.95);
+      --boxText: #111;
+      --boxRadius: 34;
+      --boxPadV: 18;
+      --boxPadH: 28;
+      --boxFontSize: 28;
+      --boxFontWeight: 800;
+
+      --canvasW: 1600;
+      --canvasH: 900;
+      --gap: 0px;
+    }
+
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: radial-gradient(1200px 700px at 30% 10%, rgba(130,90,255,.25), transparent 50%),
+                  radial-gradient(900px 600px at 70% 30%, rgba(0,180,255,.18), transparent 55%),
+                  var(--bg);
+      color: var(--text);
+    }
+
+    .wrap{
+      max-width: 1200px;
+      margin: 24px auto;
+      padding: 16px;
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 980px){
+      .wrap{ grid-template-columns: 1fr; }
+    }
+
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 20px 50px rgba(0,0,0,.35);
+    }
+
+    .title{
+      font-size: 14px;
+      letter-spacing: .6px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 0 0 10px;
+    }
+
+    /* Canvas */
+    .stage{
+      width: 100%;
+      display: grid;
+      place-items: center;
+    }
+
+    /* The thing we export */
+    .canvas{
+      position: relative;
+      width: min(100%, 1000px);
+      aspect-ratio: calc(var(--canvasW) / var(--canvasH));
+      background: #000;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,.10);
+    }
+
+    .grid{
+      position:absolute;
+      inset: 0;
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: var(--gap);
+      background: #000;
+    }
+
+    .slot{
+      position: relative;
+      background: #0a0a0a;
+      overflow: hidden;
+    }
+
+    .slot img{
+      width: 100%;
+      height: 100%;
+      display:block;
+      object-fit: cover;
+      opacity: 1;
+      transform: translateZ(0);
+    }
+
+    .slot .placeholder{
+      position:absolute;
+      inset: 0;
+      display:grid;
+      place-items:center;
+      color: rgba(255,255,255,.55);
+      font-size: 14px;
+      padding: 12px;
+      text-align:center;
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+    }
+
+    /* Center text box */
+    .centerBox{
+      position:absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      max-width: 78%;
+      width: fit-content;
+      background: var(--boxBg);
+      color: var(--boxText);
+      border-radius: calc(var(--boxRadius) * 1px);
+      padding: calc(var(--boxPadV) * 1px) calc(var(--boxPadH) * 1px);
+      box-shadow: 0 18px 40px rgba(0,0,0,.35);
+      border: 1px solid rgba(0,0,0,.08);
+      text-align: center;
+      white-space: pre-wrap;
+      font-size: calc(var(--boxFontSize) * 1px);
+      font-weight: var(--boxFontWeight);
+      line-height: 1.2;
+      pointer-events: none; /* so it won't mess with exports */
+    }
+
+    /* Controls */
+    .controls{
+      display:flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .row{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .field{
+      background: rgba(0,0,0,.25);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 12px;
+      padding: 10px;
+    }
+
+    .field label{
+      display:block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    input[type="text"], textarea, select, input[type="number"]{
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(10,12,18,.55);
+      color: var(--text);
+      padding: 10px;
+      outline: none;
+    }
+    textarea{
+      min-height: 110px;
+      resize: vertical;
+      line-height: 1.35;
+    }
+
+    .btn{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap: 8px;
+      border-radius: 12px;
+      padding: 10px 12px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.08);
+      color: var(--text);
+      cursor:pointer;
+      user-select:none;
+      transition: .15s ease;
+      text-decoration:none;
+      font-weight: 650;
+    }
+    .btn:hover{ background: rgba(255,255,255,.12); }
+    .btn:active{ transform: translateY(1px); }
+
+    .btn.primary{
+      background: rgba(130,90,255,.28);
+      border-color: rgba(130,90,255,.45);
+    }
+    .btn.primary:hover{
+      background: rgba(130,90,255,.35);
+    }
+
+    .mini{
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .uploads{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .uploadBtn{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px dashed rgba(255,255,255,.18);
+      background: rgba(0,0,0,.18);
+    }
+
+    .uploadBtn span{
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .uploadBtn input{ display:none; }
+
+    .pill{
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.08);
+      cursor:pointer;
+    }
+
+    .hr{
+      height:1px;
+      background: rgba(255,255,255,.12);
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <p class="title">Preview</p>
+
+      <div class="stage">
+        <!-- This is what we export -->
+        <div id="exportArea" class="canvas" aria-label="Collage canvas">
+          <div class="grid">
+            <div class="slot" data-slot="1">
+              <img id="img1" alt="" />
+              <div class="placeholder" id="ph1">Image 1</div>
+            </div>
+            <div class="slot" data-slot="2">
+              <img id="img2" alt="" />
+              <div class="placeholder" id="ph2">Image 2</div>
+            </div>
+            <div class="slot" data-slot="3">
+              <img id="img3" alt="" />
+              <div class="placeholder" id="ph3">Image 3</div>
+            </div>
+            <div class="slot" data-slot="4">
+              <img id="img4" alt="" />
+              <div class="placeholder" id="ph4">Image 4</div>
+            </div>
+          </div>
+
+          <div id="centerBox" class="centerBox">
+            СБД 11-р хороo зүүн айл төвөөс<br>
+            Ерөнхий Зүгээр зүүн талд<br>
+            Байрлалтай ариун очир хотхонд 52м²<br>
+            2 өрөө байр худалдана.
+          </div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn primary" id="downloadBtn">Download PNG</button>
+        <button class="btn" id="clearBtn">Clear all images</button>
+      </div>
+
+      <p class="mini" style="margin-top:10px;">
+        Tip: The export is exactly what you see. So don’t make it ugly unless you enjoy suffering.
+      </p>
+    </div>
+
+    <div class="card">
+      <p class="title">Controls</p>
+
+      <div class="controls">
+        <div class="field">
+          <label>Upload images (each slot has its own button)</label>
+          <div class="uploads">
+            <div class="uploadBtn">
+              <span>Slot 1</span>
+              <label class="pill">
+                Upload
+                <input type="file" accept="image/*" id="up1" />
+              </label>
+            </div>
+            <div class="uploadBtn">
+              <span>Slot 2</span>
+              <label class="pill">
+                Upload
+                <input type="file" accept="image/*" id="up2" />
+              </label>
+            </div>
+            <div class="uploadBtn">
+              <span>Slot 3</span>
+              <label class="pill">
+                Upload
+                <input type="file" accept="image/*" id="up3" />
+              </label>
+            </div>
+            <div class="uploadBtn">
+              <span>Slot 4</span>
+              <label class="pill">
+                Upload
+                <input type="file" accept="image/*" id="up4" />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Image fit</label>
+          <select id="fitMode">
+            <option value="cover" selected>Cover (fills slot)</option>
+            <option value="contain">Contain (no crop)</option>
+          </select>
+          <p class="mini" style="margin:8px 0 0;">
+            Cover looks like your example. Contain is for people who fear cropping.
+          </p>
+        </div>
+
+        <div class="field">
+          <label>Center text</label>
+          <textarea id="textInput" spellcheck="false"></textarea>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label>Font size</label>
+            <input type="number" id="fontSize" min="10" max="80" value="28" />
+          </div>
+          <div class="field">
+            <label>Font weight</label>
+            <input type="number" id="fontWeight" min="200" max="900" step="50" value="800" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label>Text color</label>
+            <input type="text" id="textColor" value="#111111" />
+            <p class="mini" style="margin:6px 0 0;">Hex like <code>#111111</code></p>
+          </div>
+          <div class="field">
+            <label>Box color</label>
+            <input type="text" id="boxColor" value="rgba(255,255,255,0.95)" />
+            <p class="mini" style="margin:6px 0 0;">Hex or rgba()</p>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label>Box radius</label>
+            <input type="number" id="boxRadius" min="0" max="80" value="34" />
+          </div>
+          <div class="field">
+            <label>Box padding (V / H)</label>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+              <input type="number" id="padV" min="0" max="60" value="18" />
+              <input type="number" id="padH" min="0" max="80" value="28" />
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Canvas size (export resolution)</label>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+            <input type="number" id="cW" min="800" max="4000" value="1600" />
+            <input type="number" id="cH" min="600" max="4000" value="900" />
+          </div>
+          <p class="mini" style="margin:8px 0 0;">
+            1600×900 matches your example vibe. Higher = bigger file.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    const exportArea = $("exportArea");
+    const centerBox = $("centerBox");
+
+    const imgEls = [null, $("img1"), $("img2"), $("img3"), $("img4")];
+    const phEls  = [null, $("ph1"), $("ph2"), $("ph3"), $("ph4")];
+
+    // Put initial text into the textarea (keep line breaks)
+    const defaultText = centerBox.innerText.replace(/\r\n/g, "\n");
+    $("textInput").value = defaultText;
+
+    function setCSSVar(name, value){
+      document.documentElement.style.setProperty(name, value);
+    }
+
+    function applyTextSettings(){
+      setCSSVar("--boxFontSize", $("fontSize").value);
+      setCSSVar("--boxFontWeight", $("fontWeight").value);
+      centerBox.style.color = $("textColor").value;
+      centerBox.style.background = $("boxColor").value;
+
+      setCSSVar("--boxRadius", $("boxRadius").value);
+      setCSSVar("--boxPadV", $("padV").value);
+      setCSSVar("--boxPadH", $("padH").value);
+
+      // Update text (preserve line breaks)
+      centerBox.textContent = $("textInput").value;
+    }
+
+    function applyCanvasSize(){
+      const w = clamp(parseInt($("cW").value || 1600, 10), 800, 4000);
+      const h = clamp(parseInt($("cH").value || 900, 10), 600, 4000);
+      setCSSVar("--canvasW", w);
+      setCSSVar("--canvasH", h);
+    }
+
+    function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+
+    function setFitMode(mode){
+      for (let i=1; i<=4; i++){
+        imgEls[i].style.objectFit = mode;
+      }
+    }
+
+    async function fileToDataURL(file){
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = reject;
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function handleUpload(slot, file){
+      if (!file) return;
+
+      // Basic guard: only images
+      if (!file.type.startsWith("image/")){
+        alert("That’s not an image. Humans, please.");
+        return;
+      }
+
+      const dataURL = await fileToDataURL(file);
+      imgEls[slot].src = dataURL;
+      imgEls[slot].alt = `Slot ${slot} image`;
+      phEls[slot].style.display = "none";
+    }
+
+    // Wire uploads
+    for (let i=1; i<=4; i++){
+      $("up"+i).addEventListener("change", (e) => {
+        handleUpload(i, e.target.files?.[0]);
+      });
+    }
+
+    // Fit mode
+    $("fitMode").addEventListener("change", (e) => {
+      setFitMode(e.target.value);
+    });
+
+    // Text + style settings
+    ["textInput","fontSize","fontWeight","textColor","boxColor","boxRadius","padV","padH"]
+      .forEach(id => $(id).addEventListener("input", applyTextSettings));
+
+    // Canvas size
+    ["cW","cH"].forEach(id => $(id).addEventListener("input", applyCanvasSize));
+
+    // Buttons
+    $("clearBtn").addEventListener("click", () => {
+      for (let i=1; i<=4; i++){
+        imgEls[i].removeAttribute("src");
+        phEls[i].style.display = "grid";
+        $("up"+i).value = "";
+      }
+    });
+
+    $("downloadBtn").addEventListener("click", async () => {
+      // Export at exact chosen resolution
+      const w = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--canvasW"), 10);
+      const h = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--canvasH"), 10);
+
+      // Temporarily force pixel-perfect size for capture
+      const prevWidth = exportArea.style.width;
+      exportArea.style.width = w + "px";
+
+      try{
+        const canvas = await html2canvas(exportArea, {
+          backgroundColor: null,
+          width: w,
+          height: h,
+          scale: 1,
+          useCORS: true
+        });
+
+        const a = document.createElement("a");
+        a.download = "collage.png";
+        a.href = canvas.toDataURL("image/png");
+        a.click();
+      } finally {
+        exportArea.style.width = prevWidth;
+      }
+    });
+
+    // Initial apply
+    applyTextSettings();
+    applyCanvasSize();
+    setFitMode($("fitMode").value);
+  </script>
+</body>
+</html>
