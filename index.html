@@ -15,18 +15,18 @@
       --muted: rgba(255,255,255,.65);
 
       --boxBg: rgba(255,255,255,0.95);
-      --boxText: #111;
-      --boxRadius: 34;
-      --boxPadV: 18;
-      --boxPadH: 28;
-      --boxFontSize: 28;
-      --boxFontWeight: 800;
+      --boxText: #111111;
+      --boxRadius: 35;
+      --boxPadV: 5;
+      --boxPadH: 5;
+      --boxFontSize: 15;
+      --boxFontWeight: 1000;
 
       --canvasW: 1600;
       --canvasH: 900;
       --gap: 0px;
 
-      /* scales center box UI during export so preview==export proportions */
+      /* scales center box UI during export so preview/export proportions match */
       --uiScale: 1;
     }
 
@@ -122,7 +122,7 @@
       background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
     }
 
-    /* Center text box: background moved to ::before to avoid html2canvas tiling artifacts */
+    /* Center box: background in ::before to reduce html2canvas artifacts */
     .centerBox{
       position:absolute;
       left: 50%;
@@ -161,6 +161,13 @@
       border: 1px solid rgba(0,0,0,.08);
       box-shadow: 0 18px 40px rgba(0,0,0,.35);
       z-index: -1;
+    }
+
+    /* Export-safe mode: avoid html2canvas checker/tile artifact */
+    .canvas.exportSafe .centerBox::before{
+      background: #ffffff !important;    /* solid background is safest */
+      box-shadow: none !important;
+      border: 1px solid rgba(0,0,0,.10) !important;
     }
 
     .controls{ display:flex; flex-direction: column; gap: 12px; }
@@ -276,7 +283,7 @@
       </div>
 
       <p class="mini" style="margin-top:10px;">
-        If preview and export still differ after this, your browser is doing performance art.
+        Export uses “safe mode” for the box background to avoid html2canvas glitches.
       </p>
     </div>
 
@@ -297,7 +304,7 @@
         <div class="field">
           <label>Image fit</label>
           <select id="fitMode">
-            <option value="cover">Cover (fills slot)</option>
+            <option value="cover" selected>Cover (fills slot)</option>
             <option value="contain">Contain (no crop)</option>
           </select>
         </div>
@@ -310,11 +317,11 @@
         <div class="row">
           <div class="field">
             <label>Font size</label>
-            <input type="number" id="fontSize" min="10" max="80" value="28" />
+            <input type="number" id="fontSize" min="10" max="80" value="15" />
           </div>
           <div class="field">
             <label>Font weight</label>
-            <input type="number" id="fontWeight" min="200" max="1000" step="50" value="800" />
+            <input type="number" id="fontWeight" min="200" max="1000" step="50" value="1000" />
           </div>
         </div>
 
@@ -334,13 +341,13 @@
         <div class="row">
           <div class="field">
             <label>Box radius</label>
-            <input type="number" id="boxRadius" min="0" max="80" value="34" />
+            <input type="number" id="boxRadius" min="0" max="80" value="35" />
           </div>
           <div class="field">
             <label>Box padding (V / H)</label>
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
-              <input type="number" id="padV" min="0" max="60" value="18" />
-              <input type="number" id="padH" min="0" max="80" value="28" />
+              <input type="number" id="padV" min="0" max="60" value="5" />
+              <input type="number" id="padH" min="0" max="80" value="5" />
             </div>
           </div>
         </div>
@@ -365,19 +372,20 @@
     const imgEls = [null, $("img1"), $("img2"), $("img3"), $("img4")];
     const phEls  = [null, $("ph1"),  $("ph2"),  $("ph3"),  $("ph4")];
 
+    // Defaults EXACTLY as you asked (from your screenshot)
     const DEFAULTS = {
       fitMode: "cover",
       text: `СБД 11-р хороo, зүүн айл төвөөс ертөнцийн зүгээр зүүн талд
 байрлалтай Ариун очир хотхонд 52м.кв 2 өрөө байр худалдаана
 
 📲 📲 📲 : 8081-6404`,
-      fontSize: 28,
-      fontWeight: 800,
+      fontSize: 15,
+      fontWeight: 1000,
       textColor: "#111111",
       boxColor: "rgba(255,255,255,0.95)",
-      boxRadius: 34,
-      padV: 18,
-      padH: 28,
+      boxRadius: 35,
+      padV: 5,
+      padH: 5,
       cW: 1600,
       cH: 900
     };
@@ -392,7 +400,6 @@
       setCSSVar("--boxFontSize", $("fontSize").value);
       setCSSVar("--boxFontWeight", $("fontWeight").value);
 
-      // box colors go to CSS vars so ::before uses it
       setCSSVar("--boxBg", $("boxColor").value);
       setCSSVar("--boxText", $("textColor").value);
 
@@ -411,9 +418,7 @@
     }
 
     function setFitMode(mode){
-      for (let i=1; i<=4; i++){
-        imgEls[i].style.objectFit = mode;
-      }
+      for (let i=1; i<=4; i++) imgEls[i].style.objectFit = mode;
     }
 
     async function fileToDataURL(file){
@@ -455,12 +460,12 @@
       applyTextSettings();
     }
 
-    // Wire uploads
+    // Upload handlers
     for (let i=1; i<=4; i++){
       $("up"+i).addEventListener("change", (e) => handleUpload(i, e.target.files?.[0]));
     }
 
-    // Controls
+    // Controls wiring
     $("fitMode").addEventListener("change", (e) => setFitMode(e.target.value));
 
     ["textInput","fontSize","fontWeight","textColor","boxColor","boxRadius","padV","padH"]
@@ -478,7 +483,7 @@
       }
     });
 
-    // Download
+    // Download PNG
     $("downloadBtn").addEventListener("click", async () => {
       const w = clamp(parseInt($("cW").value || 1600, 10), 800, 4000);
       const h = clamp(parseInt($("cH").value || 900, 10), 600, 4000);
@@ -488,22 +493,21 @@
         try { await document.fonts.ready; } catch {}
       }
 
-      // preview displayed size
+      // scale UI (text box) for export so it matches preview proportions
       const rect = exportArea.getBoundingClientRect();
       const uiScale = w / rect.width;
-
-      // apply export-only ui scale
       setCSSVar("--uiScale", uiScale);
 
-      // lock export size
+      // lock pixel size + enable export safe mode
       exportArea.classList.add("capture");
+      exportArea.classList.add("exportSafe");
       exportArea.style.setProperty("--capW", w + "px");
       exportArea.style.setProperty("--capH", h + "px");
       exportArea.getBoundingClientRect(); // reflow
 
       try{
         const canvas = await html2canvas(exportArea, {
-          backgroundColor: "#000", // helps avoid transparency artifacts
+          backgroundColor: "#000",
           scale: 1,
           useCORS: true
         });
@@ -513,6 +517,7 @@
         a.href = canvas.toDataURL("image/png");
         a.click();
       } finally {
+        exportArea.classList.remove("exportSafe");
         exportArea.classList.remove("capture");
         exportArea.style.removeProperty("--capW");
         exportArea.style.removeProperty("--capH");
@@ -520,7 +525,7 @@
       }
     });
 
-    // Start with real defaults
+    // Start clean with your defaults
     applyDefaults();
   </script>
 </body>
