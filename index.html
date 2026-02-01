@@ -34,9 +34,10 @@
     body{
       margin:0;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      background: radial-gradient(1200px 700px at 30% 10%, rgba(130,90,255,.25), transparent 50%),
-                  radial-gradient(900px 600px at 70% 30%, rgba(0,180,255,.18), transparent 55%),
-                  var(--bg);
+      background:
+        radial-gradient(1200px 700px at 30% 10%, rgba(130,90,255,.25), transparent 50%),
+        radial-gradient(900px 600px at 70% 30%, rgba(0,180,255,.18), transparent 55%),
+        var(--bg);
       color: var(--text);
     }
 
@@ -69,7 +70,6 @@
       margin: 0 0 10px;
     }
 
-    /* Canvas */
     .stage{
       width: 100%;
       display: grid;
@@ -85,6 +85,13 @@
       border-radius: 14px;
       overflow: hidden;
       border: 1px solid rgba(255,255,255,.10);
+    }
+
+    /* IMPORTANT FIX: during export, lock pixel size exactly (no aspect-ratio tricks) */
+    .canvas.capture{
+      width: var(--capW) !important;
+      height: var(--capH) !important;
+      aspect-ratio: auto !important;
     }
 
     .grid{
@@ -143,10 +150,9 @@
       font-size: calc(var(--boxFontSize) * 1px);
       font-weight: var(--boxFontWeight);
       line-height: 1.2;
-      pointer-events: none; /* so it won't mess with exports */
+      pointer-events: none;
     }
 
-    /* Controls */
     .controls{
       display:flex;
       flex-direction: column;
@@ -182,6 +188,7 @@
       padding: 10px;
       outline: none;
     }
+
     textarea{
       min-height: 110px;
       resize: vertical;
@@ -259,6 +266,12 @@
       background: rgba(255,255,255,.12);
       margin: 10px 0;
     }
+
+    code{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 12px;
+      color: rgba(255,255,255,.85);
+    }
   </style>
 </head>
 <body>
@@ -267,7 +280,6 @@
       <p class="title">Preview</p>
 
       <div class="stage">
-        <!-- This is what we export -->
         <div id="exportArea" class="canvas" aria-label="Collage canvas">
           <div class="grid">
             <div class="slot" data-slot="1">
@@ -289,10 +301,10 @@
           </div>
 
           <div id="centerBox" class="centerBox">
-            СБД 11-р хороo зүүн айл төвөөс<br>
-            Ерөнхий Зүгээр зүүн талд<br>
-            Байрлалтай ариун очир хотхонд 52м²<br>
-            2 өрөө байр худалдана.
+СБД 11-р хороo зүүн айл төвөөс
+Ерөнхий Зүгээр зүүн талд
+Байрлалтай ариун очир хотхонд 52м²
+2 өрөө байр худалдана.
           </div>
         </div>
       </div>
@@ -305,7 +317,7 @@
       </div>
 
       <p class="mini" style="margin-top:10px;">
-        Tip: The export is exactly what you see. So don’t make it ugly unless you enjoy suffering.
+        Tip: Export is exactly what you see now. If it looks wrong, it’s because you made it wrong.
       </p>
     </div>
 
@@ -354,7 +366,7 @@
             <option value="contain">Contain (no crop)</option>
           </select>
           <p class="mini" style="margin:8px 0 0;">
-            Cover looks like your example. Contain is for people who fear cropping.
+            Cover matches your sample. Contain avoids cropping.
           </p>
         </div>
 
@@ -408,7 +420,7 @@
             <input type="number" id="cH" min="600" max="4000" value="900" />
           </div>
           <p class="mini" style="margin:8px 0 0;">
-            1600×900 matches your example vibe. Higher = bigger file.
+            1600×900 is a good default. Bigger = heavier file.
           </p>
         </div>
       </div>
@@ -419,22 +431,25 @@
     const $ = (id) => document.getElementById(id);
 
     const exportArea = $("exportArea");
-    const centerBox = $("centerBox");
+    const centerBox  = $("centerBox");
 
     const imgEls = [null, $("img1"), $("img2"), $("img3"), $("img4")];
-    const phEls  = [null, $("ph1"), $("ph2"), $("ph3"), $("ph4")];
-
-    // Put initial text into the textarea (keep line breaks)
-    const defaultText = centerBox.innerText.replace(/\r\n/g, "\n");
-    $("textInput").value = defaultText;
+    const phEls  = [null, $("ph1"),  $("ph2"),  $("ph3"),  $("ph4")];
 
     function setCSSVar(name, value){
       document.documentElement.style.setProperty(name, value);
     }
 
+    function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+
+    // Put initial text into textarea (preserve line breaks)
+    const defaultText = centerBox.innerText.replace(/\r\n/g, "\n").trim();
+    $("textInput").value = defaultText;
+
     function applyTextSettings(){
       setCSSVar("--boxFontSize", $("fontSize").value);
       setCSSVar("--boxFontWeight", $("fontWeight").value);
+
       centerBox.style.color = $("textColor").value;
       centerBox.style.background = $("boxColor").value;
 
@@ -442,18 +457,16 @@
       setCSSVar("--boxPadV", $("padV").value);
       setCSSVar("--boxPadH", $("padH").value);
 
-      // Update text (preserve line breaks)
+      // Update text
       centerBox.textContent = $("textInput").value;
     }
 
-    function applyCanvasSize(){
+    function applyCanvasSizeVars(){
       const w = clamp(parseInt($("cW").value || 1600, 10), 800, 4000);
       const h = clamp(parseInt($("cH").value || 900, 10), 600, 4000);
       setCSSVar("--canvasW", w);
       setCSSVar("--canvasH", h);
     }
-
-    function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
 
     function setFitMode(mode){
       for (let i=1; i<=4; i++){
@@ -473,9 +486,8 @@
     async function handleUpload(slot, file){
       if (!file) return;
 
-      // Basic guard: only images
       if (!file.type.startsWith("image/")){
-        alert("That’s not an image. Humans, please.");
+        alert("Not an image.");
         return;
       }
 
@@ -501,10 +513,10 @@
     ["textInput","fontSize","fontWeight","textColor","boxColor","boxRadius","padV","padH"]
       .forEach(id => $(id).addEventListener("input", applyTextSettings));
 
-    // Canvas size
-    ["cW","cH"].forEach(id => $(id).addEventListener("input", applyCanvasSize));
+    // Canvas size vars (preview aspect-ratio)
+    ["cW","cH"].forEach(id => $(id).addEventListener("input", applyCanvasSizeVars));
 
-    // Buttons
+    // Clear button
     $("clearBtn").addEventListener("click", () => {
       for (let i=1; i<=4; i++){
         imgEls[i].removeAttribute("src");
@@ -513,21 +525,28 @@
       }
     });
 
+    // DOWNLOAD FIXED: lock BOTH width+height during capture and DO NOT force html2canvas width/height
     $("downloadBtn").addEventListener("click", async () => {
-      // Export at exact chosen resolution
-      const w = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--canvasW"), 10);
-      const h = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--canvasH"), 10);
+      const w = clamp(parseInt($("cW").value || 1600, 10), 800, 4000);
+      const h = clamp(parseInt($("cH").value || 900, 10), 600, 4000);
 
-      // Temporarily force pixel-perfect size for capture
-      const prevWidth = exportArea.style.width;
-      exportArea.style.width = w + "px";
+      // Wait for fonts so text doesn't jump sizes in export
+      if (document.fonts && document.fonts.ready) {
+        try { await document.fonts.ready; } catch {}
+      }
+
+      // Lock export area to exact pixels
+      exportArea.classList.add("capture");
+      exportArea.style.setProperty("--capW", w + "px");
+      exportArea.style.setProperty("--capH", h + "px");
+
+      // Force layout before capture
+      exportArea.getBoundingClientRect();
 
       try{
         const canvas = await html2canvas(exportArea, {
           backgroundColor: null,
-          width: w,
-          height: h,
-          scale: 1,
+          scale: Math.min(2, window.devicePixelRatio || 1),
           useCORS: true
         });
 
@@ -536,13 +555,15 @@
         a.href = canvas.toDataURL("image/png");
         a.click();
       } finally {
-        exportArea.style.width = prevWidth;
+        exportArea.classList.remove("capture");
+        exportArea.style.removeProperty("--capW");
+        exportArea.style.removeProperty("--capH");
       }
     });
 
     // Initial apply
     applyTextSettings();
-    applyCanvasSize();
+    applyCanvasSizeVars();
     setFitMode($("fitMode").value);
   </script>
 </body>
