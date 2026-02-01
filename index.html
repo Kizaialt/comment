@@ -5,8 +5,6 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>4-Photo Collage + Center Text</title>
 
-  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-
   <style>
     :root{
       --bg: #0b0d12;
@@ -14,20 +12,9 @@
       --text: rgba(255,255,255,.9);
       --muted: rgba(255,255,255,.65);
 
-      --boxBg: rgba(255,255,255,0.95);
-      --boxText: #111111;
-      --boxRadius: 35;
-      --boxPadV: 5;
-      --boxPadH: 5;
-      --boxFontSize: 15;
-      --boxFontWeight: 1000;
-
       --canvasW: 1600;
       --canvasH: 900;
       --gap: 0px;
-
-      /* scales center box UI during export so preview/export proportions match */
-      --uiScale: 1;
     }
 
     *{ box-sizing:border-box; }
@@ -69,6 +56,7 @@
 
     .stage{ width: 100%; display:grid; place-items:center; }
 
+    /* Preview canvas (DOM only) */
     .canvas{
       position: relative;
       width: min(100%, 1000px);
@@ -77,13 +65,6 @@
       border-radius: 14px;
       overflow: hidden;
       border: 1px solid rgba(255,255,255,.10);
-    }
-
-    /* During export: lock exact pixel size */
-    .canvas.capture{
-      width: var(--capW) !important;
-      height: var(--capH) !important;
-      aspect-ratio: auto !important;
     }
 
     .grid{
@@ -122,52 +103,26 @@
       background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
     }
 
-    /* Center box: background in ::before to reduce html2canvas artifacts */
+    /* Preview center box */
     .centerBox{
       position:absolute;
       left: 50%;
       top: 50%;
-      transform: translate(-50%, -50%) translateZ(0);
+      transform: translate(-50%, -50%);
       max-width: 78%;
       width: fit-content;
-
-      color: var(--boxText);
+      background: rgba(255,255,255,.95);
+      color: #111111;
+      border-radius: 35px;
+      padding: 5px 5px;
+      box-shadow: 0 18px 40px rgba(0,0,0,.35);
+      border: 1px solid rgba(0,0,0,.08);
       text-align: center;
       white-space: pre-wrap;
-      font-size: calc(var(--boxFontSize) * 1px * var(--uiScale));
-      font-weight: var(--boxFontWeight);
+      font-size: 15px;
+      font-weight: 1000;
       line-height: 1.2;
-
-      border-radius: calc(var(--boxRadius) * 1px * var(--uiScale));
-      padding:
-        calc(var(--boxPadV) * 1px * var(--uiScale))
-        calc(var(--boxPadH) * 1px * var(--uiScale));
-
-      background: transparent;
-      border: none;
-      box-shadow: none;
-
-      overflow: hidden;
-      isolation: isolate;
       pointer-events: none;
-    }
-
-    .centerBox::before{
-      content:"";
-      position:absolute;
-      inset:0;
-      border-radius: inherit;
-      background: var(--boxBg);
-      border: 1px solid rgba(0,0,0,.08);
-      box-shadow: 0 18px 40px rgba(0,0,0,.35);
-      z-index: -1;
-    }
-
-    /* Export-safe mode: avoid html2canvas checker/tile artifact */
-    .canvas.exportSafe .centerBox::before{
-      background: #ffffff !important;    /* solid background is safest */
-      box-shadow: none !important;
-      border: 1px solid rgba(0,0,0,.10) !important;
     }
 
     .controls{ display:flex; flex-direction: column; gap: 12px; }
@@ -221,8 +176,6 @@
     }
     .btn.primary:hover{ background: rgba(130,90,255,.35); }
 
-    .mini{ font-size: 12px; color: var(--muted); line-height: 1.4; }
-
     .uploads{
       display:grid;
       grid-template-columns: 1fr 1fr;
@@ -253,6 +206,7 @@
     }
 
     .hr{ height:1px; background: rgba(255,255,255,.12); margin: 10px 0; }
+    .mini{ font-size: 12px; color: var(--muted); line-height: 1.4; }
     code{ font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: rgba(255,255,255,.85); }
   </style>
 </head>
@@ -263,7 +217,7 @@
       <p class="title">Preview</p>
 
       <div class="stage">
-        <div id="exportArea" class="canvas" aria-label="Collage canvas">
+        <div id="previewCanvas" class="canvas" aria-label="Collage preview">
           <div class="grid">
             <div class="slot"><img id="img1" alt="" /><div class="placeholder" id="ph1">Image 1</div></div>
             <div class="slot"><img id="img2" alt="" /><div class="placeholder" id="ph2">Image 2</div></div>
@@ -283,7 +237,7 @@
       </div>
 
       <p class="mini" style="margin-top:10px;">
-        Export uses “safe mode” for the box background to avoid html2canvas glitches.
+        Export is rendered with real canvas, so it won’t glitch like html2canvas. Shocking concept.
       </p>
     </div>
 
@@ -363,170 +317,317 @@
     </div>
   </div>
 
-  <script>
-    const $ = (id) => document.getElementById(id);
+<script>
+  const $ = (id) => document.getElementById(id);
 
-    const exportArea = $("exportArea");
-    const centerBox  = $("centerBox");
+  const imgEls = [null, $("img1"), $("img2"), $("img3"), $("img4")];
+  const phEls  = [null, $("ph1"),  $("ph2"),  $("ph3"),  $("ph4")];
 
-    const imgEls = [null, $("img1"), $("img2"), $("img3"), $("img4")];
-    const phEls  = [null, $("ph1"),  $("ph2"),  $("ph3"),  $("ph4")];
+  // Store raw image sources for export
+  const imgSrc = {1:"",2:"",3:"",4:""};
 
-    // Defaults EXACTLY as you asked (from your screenshot)
-    const DEFAULTS = {
-      fitMode: "cover",
-      text: `СБД 11-р хороo, зүүн айл төвөөс ертөнцийн зүгээр зүүн талд
+  const DEFAULTS = {
+    fitMode: "cover",
+    text: `СБД 11-р хороo, зүүн айл төвөөс ертөнцийн зүгээр зүүн талд
 байрлалтай Ариун очир хотхонд 52м.кв 2 өрөө байр худалдаана
 
 📲 📲 📲 : 8081-6404`,
-      fontSize: 15,
-      fontWeight: 1000,
-      textColor: "#111111",
-      boxColor: "rgba(255,255,255,0.95)",
-      boxRadius: 35,
-      padV: 5,
-      padH: 5,
-      cW: 1600,
-      cH: 900
-    };
+    fontSize: 15,
+    fontWeight: 1000,
+    textColor: "#111111",
+    boxColor: "rgba(255,255,255,0.95)",
+    boxRadius: 35,
+    padV: 5,
+    padH: 5,
+    cW: 1600,
+    cH: 900
+  };
 
-    function setCSSVar(name, value){
-      document.documentElement.style.setProperty(name, value);
+  function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+
+  function applyPreviewBox(){
+    const box = $("centerBox");
+    box.textContent = $("textInput").value;
+
+    box.style.fontSize = $("fontSize").value + "px";
+    box.style.fontWeight = $("fontWeight").value;
+
+    box.style.color = $("textColor").value;
+    box.style.background = $("boxColor").value;
+
+    box.style.borderRadius = $("boxRadius").value + "px";
+    box.style.padding = `${$("padV").value}px ${$("padH").value}px`;
+  }
+
+  function applyCanvasAspectVars(){
+    const w = clamp(parseInt($("cW").value || 1600, 10), 800, 4000);
+    const h = clamp(parseInt($("cH").value || 900, 10), 600, 4000);
+    document.documentElement.style.setProperty("--canvasW", w);
+    document.documentElement.style.setProperty("--canvasH", h);
+  }
+
+  function setFitMode(mode){
+    for (let i=1; i<=4; i++) imgEls[i].style.objectFit = mode;
+  }
+
+  function applyDefaults(){
+    $("fitMode").value = DEFAULTS.fitMode;
+    $("textInput").value = DEFAULTS.text;
+
+    $("fontSize").value = DEFAULTS.fontSize;
+    $("fontWeight").value = DEFAULTS.fontWeight;
+
+    $("textColor").value = DEFAULTS.textColor;
+    $("boxColor").value = DEFAULTS.boxColor;
+
+    $("boxRadius").value = DEFAULTS.boxRadius;
+    $("padV").value = DEFAULTS.padV;
+    $("padH").value = DEFAULTS.padH;
+
+    $("cW").value = DEFAULTS.cW;
+    $("cH").value = DEFAULTS.cH;
+
+    setFitMode(DEFAULTS.fitMode);
+    applyCanvasAspectVars();
+    applyPreviewBox();
+  }
+
+  async function fileToDataURL(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = reject;
+      reader.onload = () => resolve(reader.result);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleUpload(slot, file){
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return alert("Not an image.");
+
+    const dataURL = await fileToDataURL(file);
+    imgSrc[slot] = dataURL;
+
+    imgEls[slot].src = dataURL;
+    phEls[slot].style.display = "none";
+  }
+
+  // --- Canvas export (the part that actually works) ---
+
+  function parseRGBA(str){
+    // Supports rgba(r,g,b,a) or #rrggbb
+    str = (str || "").trim();
+    if (str.startsWith("#")){
+      const hex = str.slice(1);
+      const r = parseInt(hex.slice(0,2),16);
+      const g = parseInt(hex.slice(2,4),16);
+      const b = parseInt(hex.slice(4,6),16);
+      return {r,g,b,a:1};
+    }
+    const m = str.match(/rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)(?:\s*,\s*([0-9.]+))?\s*\)/i);
+    if (!m) return {r:255,g:255,b:255,a:1};
+    return {r:+m[1], g:+m[2], b:+m[3], a:(m[4]===undefined?1:+m[4])};
+  }
+
+  function roundedRectPath(ctx, x, y, w, h, r){
+    const rr = Math.max(0, Math.min(r, Math.min(w,h)/2));
+    ctx.beginPath();
+    ctx.moveTo(x+rr, y);
+    ctx.arcTo(x+w, y, x+w, y+h, rr);
+    ctx.arcTo(x+w, y+h, x, y+h, rr);
+    ctx.arcTo(x, y+h, x, y, rr);
+    ctx.arcTo(x, y, x+w, y, rr);
+    ctx.closePath();
+  }
+
+  function drawImageFit(ctx, img, dx, dy, dw, dh, mode){
+    const iw = img.naturalWidth || img.width;
+    const ih = img.naturalHeight || img.height;
+    if (!iw || !ih) return;
+
+    const scale = mode === "contain"
+      ? Math.min(dw/iw, dh/ih)
+      : Math.max(dw/iw, dh/ih);
+
+    const sw = dw / scale;
+    const sh = dh / scale;
+    const sx = (iw - sw) / 2;
+    const sy = (ih - sh) / 2;
+
+    ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+  }
+
+  function wrapText(ctx, text, maxWidth){
+    const lines = [];
+    const paragraphs = (text || "").split("\n");
+    for (const p of paragraphs){
+      if (p.trim() === ""){
+        lines.push(""); // blank line
+        continue;
+      }
+      const words = p.split(/\s+/);
+      let line = "";
+      for (const w of words){
+        const test = line ? line + " " + w : w;
+        if (ctx.measureText(test).width <= maxWidth){
+          line = test;
+        } else {
+          if (line) lines.push(line);
+          line = w;
+        }
+      }
+      if (line) lines.push(line);
+    }
+    return lines;
+  }
+
+  function loadImage(src){
+    return new Promise((resolve) => {
+      if (!src) return resolve(null);
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = () => resolve(null);
+      im.src = src;
+    });
+  }
+
+  async function exportPNG(){
+    const w = clamp(parseInt($("cW").value || 1600, 10), 800, 4000);
+    const h = clamp(parseInt($("cH").value || 900, 10), 600, 4000);
+    const fit = $("fitMode").value;
+
+    const cnv = document.createElement("canvas");
+    cnv.width = w;
+    cnv.height = h;
+    const ctx = cnv.getContext("2d");
+
+    // Background
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0,0,w,h);
+
+    const halfW = w/2;
+    const halfH = h/2;
+
+    // Load images
+    const [i1,i2,i3,i4] = await Promise.all([
+      loadImage(imgSrc[1]),
+      loadImage(imgSrc[2]),
+      loadImage(imgSrc[3]),
+      loadImage(imgSrc[4])
+    ]);
+
+    // Slots
+    const slots = [
+      {im:i1, x:0,     y:0,     w:halfW, h:halfH},
+      {im:i2, x:halfW, y:0,     w:halfW, h:halfH},
+      {im:i3, x:0,     y:halfH, w:halfW, h:halfH},
+      {im:i4, x:halfW, y:halfH, w:halfW, h:halfH}
+    ];
+
+    for (const s of slots){
+      if (s.im){
+        drawImageFit(ctx, s.im, s.x, s.y, s.w, s.h, fit);
+      } else {
+        ctx.fillStyle = "#0a0a0a";
+        ctx.fillRect(s.x, s.y, s.w, s.h);
+      }
     }
 
-    function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+    // Center box settings
+    const fontSize = parseFloat($("fontSize").value || 15);
+    const fontWeight = parseInt($("fontWeight").value || 1000, 10);
+    const padV = parseFloat($("padV").value || 5);
+    const padH = parseFloat($("padH").value || 5);
+    const radius = parseFloat($("boxRadius").value || 35);
+    const textColor = $("textColor").value || "#111111";
+    const boxRGBA = parseRGBA($("boxColor").value || "rgba(255,255,255,0.95)");
+    const text = $("textInput").value || "";
 
-    function applyTextSettings(){
-      setCSSVar("--boxFontSize", $("fontSize").value);
-      setCSSVar("--boxFontWeight", $("fontWeight").value);
+    // Font setup (emoji fallback included)
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.font = `${fontWeight} ${fontSize}px system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji"`;
 
-      setCSSVar("--boxBg", $("boxColor").value);
-      setCSSVar("--boxText", $("textColor").value);
+    const maxBoxWidth = w * 0.78;
+    const wrapWidth = maxBoxWidth - (padH * 2);
+    const lines = wrapText(ctx, text, wrapWidth);
 
-      setCSSVar("--boxRadius", $("boxRadius").value);
-      setCSSVar("--boxPadV", $("padV").value);
-      setCSSVar("--boxPadH", $("padH").value);
+    const lineH = fontSize * 1.2;
+    const textBlockH = lines.length * lineH;
 
-      centerBox.textContent = $("textInput").value;
+    // Measure max line width
+    let maxLineW = 0;
+    for (const ln of lines){
+      maxLineW = Math.max(maxLineW, ctx.measureText(ln).width);
     }
 
-    function applyCanvasSizeVars(){
-      const w = clamp(parseInt($("cW").value || 1600, 10), 800, 4000);
-      const h = clamp(parseInt($("cH").value || 900, 10), 600, 4000);
-      setCSSVar("--canvasW", w);
-      setCSSVar("--canvasH", h);
+    const boxW = Math.min(maxBoxWidth, maxLineW + padH*2);
+    const boxH = textBlockH + padV*2;
+
+    const boxX = (w - boxW) / 2;
+    const boxY = (h - boxH) / 2;
+
+    // Shadow (safe, because it's real canvas)
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.35)";
+    ctx.shadowBlur = 40;
+    ctx.shadowOffsetY = 18;
+
+    roundedRectPath(ctx, boxX, boxY, boxW, boxH, radius);
+    ctx.fillStyle = `rgba(${boxRGBA.r},${boxRGBA.g},${boxRGBA.b},${boxRGBA.a})`;
+    ctx.fill();
+    ctx.restore();
+
+    // Border
+    ctx.save();
+    roundedRectPath(ctx, boxX, boxY, boxW, boxH, radius);
+    ctx.strokeStyle = "rgba(0,0,0,0.08)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+
+    // Text
+    ctx.fillStyle = textColor;
+    let y = boxY + padV;
+    const centerX = w / 2;
+    for (const ln of lines){
+      ctx.fillText(ln, centerX, y);
+      y += lineH;
     }
 
-    function setFitMode(mode){
-      for (let i=1; i<=4; i++) imgEls[i].style.objectFit = mode;
-    }
+    // Download
+    const a = document.createElement("a");
+    a.download = "collage.png";
+    a.href = cnv.toDataURL("image/png");
+    a.click();
+  }
 
-    async function fileToDataURL(file){
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = reject;
-        reader.onload = () => resolve(reader.result);
-        reader.readAsDataURL(file);
-      });
-    }
+  // Wire events
+  for (let i=1; i<=4; i++){
+    $("up"+i).addEventListener("change", (e) => handleUpload(i, e.target.files?.[0]));
+  }
 
-    async function handleUpload(slot, file){
-      if (!file) return;
-      if (!file.type.startsWith("image/")) return alert("Not an image.");
-      const dataURL = await fileToDataURL(file);
-      imgEls[slot].src = dataURL;
-      phEls[slot].style.display = "none";
-    }
+  $("fitMode").addEventListener("change", (e) => setFitMode(e.target.value));
+  ["textInput","fontSize","fontWeight","textColor","boxColor","boxRadius","padV","padH"]
+    .forEach(id => $(id).addEventListener("input", () => { applyPreviewBox(); }));
 
-    function applyDefaults(){
-      $("fitMode").value = DEFAULTS.fitMode;
-      $("textInput").value = DEFAULTS.text;
+  ["cW","cH"].forEach(id => $(id).addEventListener("input", applyCanvasAspectVars));
 
-      $("fontSize").value = DEFAULTS.fontSize;
-      $("fontWeight").value = DEFAULTS.fontWeight;
+  $("resetDefaultsBtn").addEventListener("click", applyDefaults);
 
-      $("textColor").value = DEFAULTS.textColor;
-      $("boxColor").value = DEFAULTS.boxColor;
-
-      $("boxRadius").value = DEFAULTS.boxRadius;
-      $("padV").value = DEFAULTS.padV;
-      $("padH").value = DEFAULTS.padH;
-
-      $("cW").value = DEFAULTS.cW;
-      $("cH").value = DEFAULTS.cH;
-
-      setFitMode(DEFAULTS.fitMode);
-      applyCanvasSizeVars();
-      applyTextSettings();
-    }
-
-    // Upload handlers
+  $("clearBtn").addEventListener("click", () => {
     for (let i=1; i<=4; i++){
-      $("up"+i).addEventListener("change", (e) => handleUpload(i, e.target.files?.[0]));
+      imgSrc[i] = "";
+      imgEls[i].removeAttribute("src");
+      phEls[i].style.display = "grid";
+      $("up"+i).value = "";
     }
+  });
 
-    // Controls wiring
-    $("fitMode").addEventListener("change", (e) => setFitMode(e.target.value));
+  $("downloadBtn").addEventListener("click", exportPNG);
 
-    ["textInput","fontSize","fontWeight","textColor","boxColor","boxRadius","padV","padH"]
-      .forEach(id => $(id).addEventListener("input", applyTextSettings));
-
-    ["cW","cH"].forEach(id => $(id).addEventListener("input", applyCanvasSizeVars));
-
-    $("resetDefaultsBtn").addEventListener("click", applyDefaults);
-
-    $("clearBtn").addEventListener("click", () => {
-      for (let i=1; i<=4; i++){
-        imgEls[i].removeAttribute("src");
-        phEls[i].style.display = "grid";
-        $("up"+i).value = "";
-      }
-    });
-
-    // Download PNG
-    $("downloadBtn").addEventListener("click", async () => {
-      const w = clamp(parseInt($("cW").value || 1600, 10), 800, 4000);
-      const h = clamp(parseInt($("cH").value || 900, 10), 600, 4000);
-
-      // Wait for fonts
-      if (document.fonts && document.fonts.ready) {
-        try { await document.fonts.ready; } catch {}
-      }
-
-      // scale UI (text box) for export so it matches preview proportions
-      const rect = exportArea.getBoundingClientRect();
-      const uiScale = w / rect.width;
-      setCSSVar("--uiScale", uiScale);
-
-      // lock pixel size + enable export safe mode
-      exportArea.classList.add("capture");
-      exportArea.classList.add("exportSafe");
-      exportArea.style.setProperty("--capW", w + "px");
-      exportArea.style.setProperty("--capH", h + "px");
-      exportArea.getBoundingClientRect(); // reflow
-
-      try{
-        const canvas = await html2canvas(exportArea, {
-          backgroundColor: "#000",
-          scale: 1,
-          useCORS: true
-        });
-
-        const a = document.createElement("a");
-        a.download = "collage.png";
-        a.href = canvas.toDataURL("image/png");
-        a.click();
-      } finally {
-        exportArea.classList.remove("exportSafe");
-        exportArea.classList.remove("capture");
-        exportArea.style.removeProperty("--capW");
-        exportArea.style.removeProperty("--capH");
-        setCSSVar("--uiScale", 1);
-      }
-    });
-
-    // Start clean with your defaults
-    applyDefaults();
-  </script>
+  // Init
+  applyDefaults();
+</script>
 </body>
 </html>
