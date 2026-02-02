@@ -237,7 +237,7 @@
       </div>
 
       <p class="mini" style="margin-top:10px;">
-        Export is rendered with real canvas, so it won’t glitch like html2canvas. Shocking concept.
+        Export text now scales to match preview (yes, that was the missing piece).
       </p>
     </div>
 
@@ -320,12 +320,16 @@
 <script>
   const $ = (id) => document.getElementById(id);
 
+  const previewCanvasEl = $("previewCanvas");
+  const centerBoxEl = $("centerBox");
+
   const imgEls = [null, $("img1"), $("img2"), $("img3"), $("img4")];
   const phEls  = [null, $("ph1"),  $("ph2"),  $("ph3"),  $("ph4")];
 
   // Store raw image sources for export
   const imgSrc = {1:"",2:"",3:"",4:""};
 
+  // Defaults (your screenshot)
   const DEFAULTS = {
     fitMode: "cover",
     text: `СБД 11-р хороo, зүүн айл төвөөс ертөнцийн зүгээр зүүн талд
@@ -346,17 +350,16 @@
   function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
 
   function applyPreviewBox(){
-    const box = $("centerBox");
-    box.textContent = $("textInput").value;
+    centerBoxEl.textContent = $("textInput").value;
 
-    box.style.fontSize = $("fontSize").value + "px";
-    box.style.fontWeight = $("fontWeight").value;
+    centerBoxEl.style.fontSize = $("fontSize").value + "px";
+    centerBoxEl.style.fontWeight = $("fontWeight").value;
 
-    box.style.color = $("textColor").value;
-    box.style.background = $("boxColor").value;
+    centerBoxEl.style.color = $("textColor").value;
+    centerBoxEl.style.background = $("boxColor").value;
 
-    box.style.borderRadius = $("boxRadius").value + "px";
-    box.style.padding = `${$("padV").value}px ${$("padH").value}px`;
+    centerBoxEl.style.borderRadius = $("boxRadius").value + "px";
+    centerBoxEl.style.padding = `${$("padV").value}px ${$("padH").value}px`;
   }
 
   function applyCanvasAspectVars(){
@@ -404,18 +407,15 @@
   async function handleUpload(slot, file){
     if (!file) return;
     if (!file.type.startsWith("image/")) return alert("Not an image.");
-
     const dataURL = await fileToDataURL(file);
     imgSrc[slot] = dataURL;
-
     imgEls[slot].src = dataURL;
     phEls[slot].style.display = "none";
   }
 
-  // --- Canvas export (the part that actually works) ---
+  // --- Canvas export (reliable) ---
 
   function parseRGBA(str){
-    // Supports rgba(r,g,b,a) or #rrggbb
     str = (str || "").trim();
     if (str.startsWith("#")){
       const hex = str.slice(1);
@@ -462,7 +462,7 @@
     const paragraphs = (text || "").split("\n");
     for (const p of paragraphs){
       if (p.trim() === ""){
-        lines.push(""); // blank line
+        lines.push("");
         continue;
       }
       const words = p.split(/\s+/);
@@ -496,6 +496,25 @@
     const h = clamp(parseInt($("cH").value || 900, 10), 600, 4000);
     const fit = $("fitMode").value;
 
+    // SCALE UI to match PREVIEW appearance
+    const previewRect = previewCanvasEl.getBoundingClientRect();
+    const scaleUI = w / previewRect.width;
+
+    const baseFontSize = parseFloat($("fontSize").value || 15);
+    const basePadV = parseFloat($("padV").value || 5);
+    const basePadH = parseFloat($("padH").value || 5);
+    const baseRadius = parseFloat($("boxRadius").value || 35);
+
+    const fontSize = baseFontSize * scaleUI;
+    const padV = basePadV * scaleUI;
+    const padH = basePadH * scaleUI;
+    const radius = baseRadius * scaleUI;
+
+    const fontWeight = parseInt($("fontWeight").value || 1000, 10);
+    const textColor = $("textColor").value || "#111111";
+    const boxRGBA = parseRGBA($("boxColor").value || "rgba(255,255,255,0.95)");
+    const text = $("textInput").value || "";
+
     const cnv = document.createElement("canvas");
     cnv.width = w;
     cnv.height = h;
@@ -508,7 +527,6 @@
     const halfW = w/2;
     const halfH = h/2;
 
-    // Load images
     const [i1,i2,i3,i4] = await Promise.all([
       loadImage(imgSrc[1]),
       loadImage(imgSrc[2]),
@@ -516,7 +534,6 @@
       loadImage(imgSrc[4])
     ]);
 
-    // Slots
     const slots = [
       {im:i1, x:0,     y:0,     w:halfW, h:halfH},
       {im:i2, x:halfW, y:0,     w:halfW, h:halfH},
@@ -533,16 +550,6 @@
       }
     }
 
-    // Center box settings
-    const fontSize = parseFloat($("fontSize").value || 15);
-    const fontWeight = parseInt($("fontWeight").value || 1000, 10);
-    const padV = parseFloat($("padV").value || 5);
-    const padH = parseFloat($("padH").value || 5);
-    const radius = parseFloat($("boxRadius").value || 35);
-    const textColor = $("textColor").value || "#111111";
-    const boxRGBA = parseRGBA($("boxColor").value || "rgba(255,255,255,0.95)");
-    const text = $("textInput").value || "";
-
     // Font setup (emoji fallback included)
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
@@ -555,7 +562,6 @@
     const lineH = fontSize * 1.2;
     const textBlockH = lines.length * lineH;
 
-    // Measure max line width
     let maxLineW = 0;
     for (const ln of lines){
       maxLineW = Math.max(maxLineW, ctx.measureText(ln).width);
@@ -567,11 +573,11 @@
     const boxX = (w - boxW) / 2;
     const boxY = (h - boxH) / 2;
 
-    // Shadow (safe, because it's real canvas)
+    // Shadow
     ctx.save();
     ctx.shadowColor = "rgba(0,0,0,0.35)";
-    ctx.shadowBlur = 40;
-    ctx.shadowOffsetY = 18;
+    ctx.shadowBlur = 40 * scaleUI;
+    ctx.shadowOffsetY = 18 * scaleUI;
 
     roundedRectPath(ctx, boxX, boxY, boxW, boxH, radius);
     ctx.fillStyle = `rgba(${boxRGBA.r},${boxRGBA.g},${boxRGBA.b},${boxRGBA.a})`;
@@ -582,7 +588,7 @@
     ctx.save();
     roundedRectPath(ctx, boxX, boxY, boxW, boxH, radius);
     ctx.strokeStyle = "rgba(0,0,0,0.08)";
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1 * scaleUI;
     ctx.stroke();
     ctx.restore();
 
@@ -608,8 +614,9 @@
   }
 
   $("fitMode").addEventListener("change", (e) => setFitMode(e.target.value));
+
   ["textInput","fontSize","fontWeight","textColor","boxColor","boxRadius","padV","padH"]
-    .forEach(id => $(id).addEventListener("input", () => { applyPreviewBox(); }));
+    .forEach(id => $(id).addEventListener("input", applyPreviewBox));
 
   ["cW","cH"].forEach(id => $(id).addEventListener("input", applyCanvasAspectVars));
 
