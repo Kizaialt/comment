@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Building Highlighter</title>
+<style>
+body { margin:0; font-family:Arial; background:#111; color:#fff; }
+#controls { padding:10px; background:#1a1a1a; }
+button { padding:8px 12px; margin-right:5px; cursor:pointer; }
+canvas { display:block; margin:auto; background:#000; max-width:100%; }
+</style>
+</head>
+
+<body>
+
+<div id="controls">
+  <input type="file" id="upload">
+  <button onclick="finishMask()">Finish Mask</button>
+  <button onclick="clearMask()">Clear</button>
+  <button onclick="exportImage()">Export</button>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const upload = document.getElementById("upload");
+
+let img = new Image();
+let points = [];
+let closed = false;
+
+// upload
+upload.onchange = e => {
+  const file = e.target.files[0];
+  const reader = new FileReader();
+
+  reader.onload = () => {
+    img.onload = () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      points = [];
+      closed = false;
+      draw();
+    };
+    img.src = reader.result;
+  };
+
+  reader.readAsDataURL(file);
+};
+
+// click to draw polygon
+canvas.onclick = e => {
+  if (closed) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+  points.push({x,y});
+  draw();
+};
+
+// finish mask
+function finishMask() {
+  if (points.length > 2) {
+    closed = true;
+    draw();
+  }
+}
+
+// clear
+function clearMask() {
+  points = [];
+  closed = false;
+  draw();
+}
+
+// draw everything
+function draw() {
+  if (!img.src) return;
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // draw base
+  ctx.drawImage(img,0,0);
+
+  if (closed) {
+    // dim background
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    // clip building
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    points.forEach(p=>ctx.lineTo(p.x,p.y));
+    ctx.closePath();
+    ctx.clip();
+
+    // redraw building (bright)
+    ctx.globalAlpha = 1;
+    ctx.drawImage(img,0,0);
+    ctx.restore();
+
+    // outline
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    points.forEach(p=>ctx.lineTo(p.x,p.y));
+    ctx.closePath();
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+  }
+
+  // draw points
+  ctx.fillStyle = "white";
+  points.forEach(p=>{
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,4,0,Math.PI*2);
+    ctx.fill();
+  });
+}
+
+// export
+function exportImage() {
+  const link = document.createElement("a");
+  link.download = "result.png";
+  link.href = canvas.toDataURL();
+  link.click();
+}
+</script>
+
+</body>
+</html>
